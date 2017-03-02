@@ -3,15 +3,21 @@
 
 let myPanel;
 let urlHolder;
-const urls = ['dummy'];
+let baseUrl;
+let baseUrlReg;
+const urls = new Map();
 
 function update() {
 	if (!urlHolder) {
 		return;
 	}
-	urlHolder.innerHTML = urls.map(o => `
-		<li>${o.url}</li>
-	`).join('');
+	urlHolder.innerHTML = [...urls.values()].map(function (o) {
+		let parseUrl = o.url;
+		if (baseUrlReg && o.url.match(baseUrlReg)) {
+			parseUrl = parseUrl.substr(baseUrl.length);
+		}
+		return `<li>${o.count}, ${parseUrl}</li>`;
+	}).join('');
 }
 
 const port = chrome.runtime.connect({ name: 'devtools-console' });
@@ -26,18 +32,36 @@ chrome.devtools.panels.create(
 			port.postMessage('panel shown');
 			myPanel = win;
 			urlHolder = myPanel.document.querySelector('#all');
-			port.postMessage(urlHolder.tagName);
 			update();
+
+			chrome.devtools.inspectedWindow.eval(
+				'window.location.toString()',
+				function (result) {
+
+					// Pull out domain name
+					baseUrl = result.match(/^.+:\/\/[^\/]*/)[0];
+					baseUrlReg = new RegExp('^' + baseUrl);
+					myPanel.document.querySelector('#base').value = baseUrl;
+					update();
+				}
+			);
+
 		});
 	}
 );
 
 chrome.devtools.network.onRequestFinished.addListener(function (e) {
+	if (e.request.url.match(/^data:/)) return;
 	const url = {
 		url: e.request.url,
 		headersSize: e.response.headersSize,
-		bodySize: e.response.bodySize
+		bodySize: e.response.bodySize,
+		count: 1
 	};
-	urls.push(url);
+	if (urls.has(url.url)) {
+		urls.get(url.url).count += 1;
+	} else {
+		urls.set(url.url, url);
+	}
 	update();
 });

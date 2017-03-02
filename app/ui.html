@@ -6,9 +6,53 @@
 		<title></title>
 		<meta name="description" content="">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<style>
+			.lozenge {
+				height: 1em;
+				display: inline-block;
+				width: 2em;
+				border-radius: 0.8em / 0.3em;
+				vertical-align: middle;
+			}
+
+			.drop-down {
+				position: absolute;
+				pointer-events: none;
+				opacity: 0;
+			}
+			.drop-down + label {
+				padding: 0.3em;
+			}
+			.drop-down:focus + label {
+				outline: solid 2px lightblue;
+			}
+			.drop-down + label:after {
+				content: "\25BA";
+				transition: transform 0.5s ease;
+				display: inline-block;
+			}
+			.drop-down:checked + label:after {
+				transform: rotate(90deg);
+			}
+			.togle-content {
+				display: none;
+			}
+			.drop-down:checked + label + .toggle-content {
+				display: block;
+			}
+		</style>
 	</head>
 	<body>
 		<h1>Route Helper</h1>
+		<label><input type="text" placeholder="https://example.com" id="base"/> Base URL including Protocol</label>
+		<h2>
+			Routes
+		</h2>
+		<input id="toggle" type="checkbox" class="drop-down">
+		<label for="toggle">
+			<div class="lozenge" style="background-color: blue;"></div> Category 1
+		</label>
+		<div class="toggle-content"></div>
 		<h2>
 			Detected Network Events
 		</h2>
