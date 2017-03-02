@@ -7,6 +7,12 @@ let baseUrl;
 let baseUrlReg;
 const urls = new Map();
 
+const categories = [{
+	pattern: '/static/',
+	name: 'Static Elements',
+	id: 0
+}];
+
 function update() {
 	if (!urlHolder) {
 		return;
