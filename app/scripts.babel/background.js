@@ -1,13 +1,11 @@
 'use strict';
+/* eslint no-console: 0 */
 
 chrome.runtime.onInstalled.addListener(details => {
 	console.log('previousVersion', details.previousVersion);
 });
 
 console.log('\'Allo \'Allo! Event Page');
-
-const urls = [];
-let uiPort;
 
 chrome.runtime.onConnect.addListener(function(port) {
 	if (port.name === 'devtools-console') {

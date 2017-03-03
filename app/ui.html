@@ -22,6 +22,7 @@
 			}
 			.drop-down + label {
 				padding: 0.3em;
+				display: block;
 			}
 			.drop-down:focus + label {
 				outline: solid 2px lightblue;
@@ -40,6 +41,40 @@
 			.drop-down:checked + label + .toggle-content {
 				display: block;
 			}
+			.url-part:hover {
+				text-decoration: underline;
+				color: blue;
+				cursor: pointer;
+			}
+			.unsorted-url:hover .url-part:hover ~ .url-part {
+				color: black;
+				text-decoration: none;
+			}
+
+			ul {
+				padding: 0;
+			}
+
+			.unsorted-url {
+				margin: 0 0 0.3em 0;
+				padding: 0;
+				list-style: none;
+			}
+
+			.unsorted-url:nth-child(odd) {
+				background: #eeeeee;
+			}
+
+			.unsorted-url:before {
+				content: attr(data-count) ', ';
+				color: black;
+				left: -2em;
+			}
+
+			.unsorted-url .url-part_container:hover .url-part {
+				color:red;
+				text-decoration: underline;
+			}
 		</style>
 	</head>
 	<body>
@@ -48,10 +83,9 @@
 		<h2>
 			Routes
 		</h2>
-		<input id="toggle" type="checkbox" class="drop-down">
-		<label for="toggle">
-			<div class="lozenge" style="background-color: blue;"></div> Category 1
-		</label>
+		<div id="routes-container">
+
+		</div>
 		<div class="toggle-content"></div>
 		<h2>
 			Detected Network Events
