@@ -14,11 +14,12 @@ const categories = new Map();
 function generateRouteBox(cat) {
 	const el = document.createElement('div');
 	el.innerHTML = `
-	<input id="toggle" type="checkbox" class="drop-down">
-	<label for="toggle">
-	 	<div class="lozenge" style="background-color: blue;"></div> <span class="route-name"></span>
+	<input id="toggle${cat.id}" type="checkbox" class="drop-down">
+	<label for="toggle${cat.id}">
+	 	<div class="lozenge" style="background-color: hsl(${(222.4922359499622 * cat.id) % 360},80%,80%);"></div> <span class="route-name"></span>
 	</label>
-	<span>Pattern: <code>${cat.pattern}</code></span>
+	<span class="pattern">Pattern: <code>${cat.pattern}</code></span>
+	<ul></ul>
 	`;
 	return el;
 }
@@ -28,17 +29,17 @@ function renderRoutes() {
 	if (!$) return;
 	routesContainer = routesContainer || $.querySelector('#routes-container');
 
-	for (const cat of categories.values()) {
+	for (const cat of [...categories.values()].reverse()) {
 		if (!cat.el) {
 			cat.el = generateRouteBox(cat);
 			cat.nameEl = cat.el.querySelector('.route-name');
-			cat.nameEl.textContent = cat.name;
+			cat.listEl = cat.el.querySelector('ul');
 		}
 		routesContainer.appendChild(cat.el);
 	}
 }
 
-function getParts(urlIn) {
+function getParts(urlIn, stripSearch) {
 	const url = new URL(urlIn);
 	let urlBits = url.pathname.split('/');
 	urlBits[0] = url.origin;
@@ -52,7 +53,7 @@ function getParts(urlIn) {
 		out.value = partvalue;
 		return out;
 	});
-	if (url.search) {
+	if (!stripSearch && url.search) {
 		const out = {};
 		out.text = url.search;
 		out.value = urlIn;
@@ -73,24 +74,77 @@ function getParts(urlIn) {
 	return urlBits;
 }
 
+function escapeRegExp(text) {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+};
+
 function liOnClick(e) {
 	if (e.target.dataset.urlPart) {
 		const value = e.target.dataset.urlPart;
 		if (!categories.has(value)) {
+			let pattern;
+			let regExp;
+			const parts = getParts(value);
+			const fullUrl = e.currentTarget.dataset.fullUrl
+
+			if (
+				parts[0] === true &&
+				(
+					// if it is the base url
+					parts.length === 1 || (
+
+						// and has no search query
+						parts[parts.length - 1].text[0] !== '?' &&
+
+						// and isn't just the full url
+						parts[parts.length - 1].value !== fullUrl
+					)
+				)
+			) {
+
+				// treat as a relative url so generate express style routes
+				// special case: just base url gets treated as '/'
+
+				if (parts.length === 1) {
+					pattern = '/*';
+					regExp = window.pathToRegexp(baseUrl + '*');
+				} else {
+					pattern = parts.map(i => i.text).join('') + '*';
+
+					// Create a RegExp which includes the baseUrl but behaves like an express route
+					regExp = window.pathToRegexp(parts[parts.length - 1].value + '*');
+				}
+			} else {
+
+				// treat as an absolute url so use RegExp
+				if (parts[parts.length - 1].value === fullUrl) {
+
+					// The full url needs an absolute match
+					pattern = new RegExp('^' + escapeRegExp(value) + '$');
+				} else {
+
+					// otherwise allow additional parts of the url
+					pattern = new RegExp('^' + escapeRegExp(value) + '.*');
+				}
+				regExp = pattern;
+			}
 			const id = categories.size;
 			categories.set(value, {
-				pattern: value,
+				pattern,
+				regExp,
 				name: 'Category ' + (id + 1),
 				id
 			});
 		}
 		renderRoutes();
+		update();
 	}
 }
 
 function createListItem(o) {
 	const el = $.createElement('li');
 	el.classList.add('unsorted-url');
+	el.dataset.fullUrl = o.url;
 	const container = $.createElement('span');
 	container.classList.add('url-part_container');
 	const urlBits = getParts(o.url);
@@ -120,6 +174,17 @@ function update() {
 		o.el = o.el || createListItem(o);
 		o.el.dataset.count = o.count;
 		urlHolder.appendChild(o.el);
+
+		for (const cat of [...categories.values()].reverse()) {
+			if (cat.regExp && cat.regExp.exec(o.url)) {
+				cat.listEl.appendChild(o.el);
+				break;
+			}
+		}
+	}
+
+	for (const cat of categories.values()) {
+		cat.nameEl.textContent = `${cat.name} (${cat.listEl.children.length})`;
 	}
 }
 
@@ -147,6 +212,8 @@ chrome.devtools.panels.create(
 			port.postMessage('panel shown');
 			myPanel = win;
 			$ = myPanel.document;
+
+			renderRoutes();
 			update();
 
 			chrome.devtools.inspectedWindow.eval(
@@ -165,16 +232,17 @@ chrome.devtools.panels.create(
 
 chrome.devtools.network.onRequestFinished.addListener(function (e) {
 	if (e.request.url.match(/^data:/)) return;
-	const url = {
-		url: e.request.url,
-		headersSize: e.response.headersSize,
-		bodySize: e.response.bodySize,
-		count: 1
-	};
-	if (urls.has(url.url)) {
-		urls.get(url.url).count += 1;
+	if (urls.has(e.request.url)) {
+		urls.get(e.request.url).count += 1;
 	} else {
-		urls.set(url.url, url);
+		const url = {
+			url: e.request.url,
+			headersSize: e.response.headersSize,
+			bodySize: e.response.bodySize,
+			count: 1
+		};
+
+		urls.set(e.request.url, url);
 	}
 	update();
 });

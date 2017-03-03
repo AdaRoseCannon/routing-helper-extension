@@ -22,7 +22,10 @@
 			}
 			.drop-down + label {
 				padding: 0.3em;
-				display: block;
+			}
+			.drop-down + label + .pattern {
+				float: right;
+				color: #777;
 			}
 			.drop-down:focus + label {
 				outline: solid 2px lightblue;
@@ -34,6 +37,12 @@
 			}
 			.drop-down:checked + label:after {
 				transform: rotate(90deg);
+			}
+			.drop-down ~ ul {
+				display: none;
+			}
+			.drop-down:checked ~ ul {
+				display: block;
 			}
 			.togle-content {
 				display: none;
