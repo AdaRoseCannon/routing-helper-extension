@@ -9,19 +9,83 @@ let baseUrlParts;
 let routesContainer;
 
 const urls = new Map();
-const categories = new Map();
+let categories = new Map();
+
+const itemsToSync = [
+	'name',
+	'id',
+	'pattern',
+	'regExp'
+];
+
+function log(o) {
+	const str = JSON.stringify(o);
+	port.postMessage(o);
+	chrome.devtools.inspectedWindow.eval('console.log(' + str + ');');
+}
 
 function generateRouteBox(cat) {
 	const el = document.createElement('div');
+	el.style.backgroundColor = `hsl(${(222.4922359499622 * cat.id) % 360},70%,90%)`;
+	el.style.borderBottom = `3px solid hsl(${(222.4922359499622 * cat.id) % 360},90%,60%)`;
 	el.innerHTML = `
 	<input id="toggle${cat.id}" type="checkbox" class="drop-down">
 	<label for="toggle${cat.id}">
-	 	<div class="lozenge" style="background-color: hsl(${(222.4922359499622 * cat.id) % 360},80%,80%);"></div> <span class="route-name"></span>
+	 	<div class="lozenge" style="background-color: hsl(${(222.4922359499622 * cat.id) % 360},80%,80%);"></div> <input class="route-name" readonly="readonly" />
 	</label>
-	<span class="pattern">Pattern: <code>${cat.pattern}</code></span>
+	<span class="pattern">Pattern: <input value="${cat.pattern}" readonly="readonly" /><span class="pattern-type"><br />
+		<label><input type="radio" name="pattern-type-${cat.id}" ${cat.pattern === cat.regExp ? 'checked' : ''} value="regexp">RegExp Pattern</label><br />
+		<label><input type="radio" name="pattern-type-${cat.id}" ${cat.pattern !== cat.regExp ? 'checked' : ''} value="express">Express Style Pattern</label>
+	</span></span>
 	<ul></ul>
 	`;
 	return el;
+}
+
+function storeAndUpdateCategories() {
+	chrome.storage.sync.set({
+		[baseUrl]: [...categories.entries()].map(a => {
+			const out = {};
+			for (const key of itemsToSync) {
+				out[key] = a[1][key];
+			}
+			a[1] = out;
+			return a;
+		})
+	});
+	renderRoutes();
+	update();
+}
+
+function editCat(cat, focusEl) {
+	if (cat.editing) return;
+	cat.editing = true;
+	cat.nameEl.value = cat.name;
+	cat.nameEl.readOnly = false;
+	cat.patternEl.readOnly = false;
+	cat.nameEl.focus();
+	if (focusEl.focus) focusEl.focus();
+}
+
+function doneEdit(cat) {
+	if (!cat.editing) return;
+	cat.editing = false;
+
+	// Update values for rerender
+	cat.name = cat.nameEl.value;
+
+	routesContainer.removeChild(cat.el);
+	cat.el = false;
+	storeAndUpdateCategories();
+}
+
+function cancelEdit(cat) {
+	if (!cat.editing) return;
+	cat.editing = false;
+
+	routesContainer.removeChild(cat.el);
+	cat.el = false;
+	storeAndUpdateCategories();
 }
 
 function renderRoutes() {
@@ -34,6 +98,21 @@ function renderRoutes() {
 			cat.el = generateRouteBox(cat);
 			cat.nameEl = cat.el.querySelector('.route-name');
 			cat.listEl = cat.el.querySelector('ul');
+			cat.patternEl = cat.el.querySelector('.pattern input');
+			cat.el.addEventListener('keyup', e => {
+				if (e.keyCode === 113) {
+					editCat(cat, cat.nameEl);
+				}
+				if (e.keyCode === 13) {
+					doneEdit(cat);
+				}
+				if (e.keyCode === 27) {
+					cancelEdit(cat);
+					e.preventDefault();
+					e.stopPropagation();
+				}
+			});
+			cat.el.addEventListener('dblclick', e => editCat(cat, e.target));
 		}
 		routesContainer.appendChild(cat.el);
 	}
@@ -75,7 +154,7 @@ function getParts(urlIn, stripSearch) {
 }
 
 function escapeRegExp(text) {
-  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+	return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
 };
 
 function liOnClick(e) {
@@ -120,24 +199,23 @@ function liOnClick(e) {
 				if (parts[parts.length - 1].value === fullUrl) {
 
 					// The full url needs an absolute match
-					pattern = new RegExp('^' + escapeRegExp(value) + '$');
+					regExp = new RegExp('^' + escapeRegExp(value) + '$');
 				} else {
 
 					// otherwise allow additional parts of the url
-					pattern = new RegExp('^' + escapeRegExp(value) + '.*');
+					regExp = new RegExp('^' + escapeRegExp(value) + '.*');
 				}
-				regExp = pattern;
+				pattern = regExp.toString();
 			}
 			const id = categories.size;
 			categories.set(value, {
 				pattern,
-				regExp,
+				regExp: regExp.toString(),
 				name: 'Category ' + (id + 1),
 				id
 			});
+			storeAndUpdateCategories();
 		}
-		renderRoutes();
-		update();
 	}
 }
 
@@ -167,6 +245,11 @@ function createListItem(o) {
 	return el;
 }
 
+function reviveRegExp(exp) {
+	const m = exp.match(/\/(.*)\/(.*)?/);
+    return new RegExp(m[1], m[2] || '');
+}
+
 function update() {
 	if (!baseUrl) return;
 	urlHolder = urlHolder || $.querySelector('#all');
@@ -176,15 +259,18 @@ function update() {
 		urlHolder.appendChild(o.el);
 
 		for (const cat of [...categories.values()].reverse()) {
-			if (cat.regExp && cat.regExp.exec(o.url)) {
-				cat.listEl.appendChild(o.el);
-				break;
+			if (cat.regExp) {
+				const regex = cat.actualRegExp || (cat.actualRegExp = reviveRegExp(cat.regExp));
+				if (regex.exec(o.url)) {
+					cat.listEl.appendChild(o.el);
+					break;
+				}
 			}
 		}
 	}
 
 	for (const cat of categories.values()) {
-		cat.nameEl.textContent = `${cat.name} (${cat.listEl.children.length})`;
+		cat.nameEl.value = `${cat.name} (${cat.listEl.children.length})`;
 	}
 }
 
@@ -196,25 +282,32 @@ function updateBaseUrlParts(url) {
 	baseUrlParts = [];
 	baseUrlParts = getParts(url);
 	$.querySelector('#base').value = url;
-	renderRoutes();
-	update();
+
+	chrome.storage.sync.get(baseUrl, function (result) {
+		result = result[baseUrl];
+		if (result && result.constructor === Array) {
+			log(JSON.stringify(result));
+			categories = new Map(result);
+		}
+		renderRoutes();
+		update();
+	});
 }
 
 const port = chrome.runtime.connect({ name: 'devtools-console' });
+
 
 chrome.devtools.panels.create(
 	'Route Helper',
 	'images/icon128.png',
 	'ui.html',
 	function (panel) {
-		port.postMessage('panel created');
-		panel.onShown.addListener(function (win) {
-			port.postMessage('panel shown');
+		panel.onShown.addListener(function temp(win) {
+
+			if (myPanel) return;
+
 			myPanel = win;
 			$ = myPanel.document;
-
-			renderRoutes();
-			update();
 
 			chrome.devtools.inspectedWindow.eval(
 				'window.location.toString()',
@@ -227,6 +320,7 @@ chrome.devtools.panels.create(
 			);
 
 		});
+
 	}
 );
 
@@ -245,4 +339,21 @@ chrome.devtools.network.onRequestFinished.addListener(function (e) {
 		urls.set(e.request.url, url);
 	}
 	update();
+});
+
+chrome.storage.onChanged.addListener(function (changes) {
+	for (const key in changes) {
+		if (key === baseUrl) {
+			const newValue = changes[key].newValue;
+			log(newValue);
+			for (const o of newValue) {
+				const toBeUpdated = categories.get(o[0]);
+				for (const key of itemsToSync) {
+					toBeUpdated[key] = o[1][key];
+				}
+			}
+			renderRoutes();
+			update();
+		}
+	}
 });

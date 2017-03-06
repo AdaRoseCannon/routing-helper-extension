@@ -22,10 +22,18 @@
 			}
 			.drop-down + label {
 				padding: 0.3em;
+				display: inline-block;
 			}
 			.drop-down + label + .pattern {
 				float: right;
 				color: #777;
+			}
+			.drop-down + label + .pattern input {
+				font-family: monospace;
+				width: 20em;
+			}
+			.drop-down + label + .pattern input[readonly] + span {
+				display: none;
 			}
 			.drop-down:focus + label {
 				outline: solid 2px lightblue;
@@ -43,6 +51,7 @@
 			}
 			.drop-down:checked ~ ul {
 				display: block;
+				clear: both;
 			}
 			.togle-content {
 				display: none;
@@ -59,7 +68,10 @@
 				color: black;
 				text-decoration: none;
 			}
-
+			input[readonly] {
+				all: unset;
+				font-weight: bold;
+			}
 			ul {
 				padding: 0;
 			}
@@ -71,7 +83,7 @@
 			}
 
 			.unsorted-url:nth-child(odd) {
-				background: #eeeeee;
+				background: rgba(255,255,255,0.6);
 			}
 
 			.unsorted-url:before {
@@ -84,6 +96,14 @@
 				color:red;
 				text-decoration: underline;
 			}
+
+			#routes-container div {
+				clear: both;
+				margin-bottom: 0.5em;
+				padding-bottom: 1px;
+				overflow: hidden;
+			}
+
 		</style>
 	</head>
 	<body>
