@@ -16,7 +16,8 @@ const itemsToSync = [
 	'id',
 	'pattern',
 	'regExp',
-	'expired'
+	'expired',
+	'priority'
 ];
 
 function log(o) {
@@ -30,9 +31,11 @@ function generateRouteBox(cat) {
 	el.style.backgroundColor = `hsl(${(222.4922359499622 * cat.id) % 360},70%,90%)`;
 	el.style.borderBottom = `3px solid hsl(${(222.4922359499622 * cat.id) % 360},90%,60%)`;
 	el.innerHTML = `
+	<button aria-label="move down" class="move-down">&#9660;</button>
+	<button aria-label="move up" class="move-up">&#9650;</button>
 	<button aria-label="remove" class="remove">&#215;</button>
-	<input id="toggle${cat.id}" type="checkbox" class="drop-down">
-	<label for="toggle${cat.id}">
+	<input id="toggle-${cat.id}" type="checkbox" class="drop-down">
+	<label for="toggle-${cat.id}">
 	 	<div class="lozenge" style="background-color: hsl(${(222.4922359499622 * cat.id) % 360},80%,80%);"></div> <span class="editor route-name"></span>
 	</label>
 	<span class="pattern">Pattern: <span class="editor" />${cat.pattern}</span><span class="pattern-type"><br />
@@ -44,17 +47,24 @@ function generateRouteBox(cat) {
 	return el;
 }
 
+function getCats() {
+	return [...categories.values()].filter(a => !a.expired).sort((a,b) => (b.priority || 0) - (a.priority || 0));
+}
+
 function storeAndUpdateCategories() {
 	chrome.storage.sync.set({
-		[baseUrl]: [...categories.entries()].filter(a => !a[1].expired).map(a => {
-			const out = {};
-			for (const key of itemsToSync) {
-				out[key] = a[1][key];
-			}
-			a[1] = out;
-			return a;
-		})
+		[baseUrl]: []
 	});
+	// chrome.storage.sync.set({
+	// 	[baseUrl]: [...categories.entries()].map(a => {
+	// 		const out = {};
+	// 		for (const key of itemsToSync) {
+	// 			out[key] = a[1][key];
+	// 		}
+	// 		a[1] = out;
+	// 		return a;
+	// 	})
+	// });
 	renderRoutes();
 	update();
 }
@@ -98,18 +108,34 @@ function removeCat(cat) {
 	storeAndUpdateCategories();
 }
 
+function moveCat(cat, up) {
+	const cats = getCats();
+	const index = cats.indexOf(cat);
+	const a = cats[index];
+	const bIndex = index + (up ? -1 : 1);
+	const b = cats[bIndex];
+	if (bIndex >= 0 && bIndex < cats.length) {
+		const aOld = a.priority;
+		a.priority = b.priority;
+		b.priority = aOld;
+		storeAndUpdateCategories();
+	}
+}
+
 function renderRoutes() {
 
 	if (!$) return;
 	routesContainer = routesContainer || $.querySelector('#routes-container');
 
-	for (const cat of [...categories.values()].filter(c => !c.expired).reverse()) {
+	for (const cat of getCats()) {
 		if (!cat.el) {
 			cat.el = generateRouteBox(cat);
 			cat.nameEl = cat.el.querySelector('.editor.route-name');
 			cat.listEl = cat.el.querySelector('ul');
 			cat.patternEl = cat.el.querySelector('.pattern .editor');
 			cat.el.querySelector('button.remove').addEventListener('click', () => removeCat(cat));
+			cat.el.querySelector('button.move-up').addEventListener('click', () => moveCat(cat, true));
+			cat.el.querySelector('button.move-down').addEventListener('click', () => moveCat(cat, false));
 			cat.el.addEventListener('keyup', e => {
 				if (e.keyCode === 113) {
 					editCat(cat, cat.nameEl);
@@ -218,12 +244,15 @@ function liOnClick(e) {
 				}
 				pattern = regExp.toString();
 			}
-			const id = categories.size;
+			const id = categories.has(value) ? categories.get(value).id : categories.size;
+			const cats = getCats();
+			const priority = cats.length ? (cats[0].priority || 0) + 1 : 0;
 			categories.set(value, {
 				pattern,
 				regExp: regExp.toString(),
 				name: 'Category ' + (id + 1),
-				id
+				id,
+				priority
 			});
 			storeAndUpdateCategories();
 		}
@@ -269,7 +298,7 @@ function update() {
 		o.el.dataset.count = o.count;
 		urlHolder.appendChild(o.el);
 
-		for (const cat of [...categories.values()].filter(c => !c.expired).reverse()) {
+		for (const cat of getCats()) {
 			if (cat.regExp) {
 				const regex = cat.actualRegExp || (cat.actualRegExp = reviveRegExp(cat.regExp));
 				if (regex.exec(o.url)) {
