@@ -15,7 +15,8 @@ const itemsToSync = [
 	'name',
 	'id',
 	'pattern',
-	'regExp'
+	'regExp',
+	'expired'
 ];
 
 function log(o) {
@@ -29,11 +30,12 @@ function generateRouteBox(cat) {
 	el.style.backgroundColor = `hsl(${(222.4922359499622 * cat.id) % 360},70%,90%)`;
 	el.style.borderBottom = `3px solid hsl(${(222.4922359499622 * cat.id) % 360},90%,60%)`;
 	el.innerHTML = `
+	<button aria-label="remove" class="remove">&#215;</button>
 	<input id="toggle${cat.id}" type="checkbox" class="drop-down">
 	<label for="toggle${cat.id}">
-	 	<div class="lozenge" style="background-color: hsl(${(222.4922359499622 * cat.id) % 360},80%,80%);"></div> <input class="route-name" readonly="readonly" />
+	 	<div class="lozenge" style="background-color: hsl(${(222.4922359499622 * cat.id) % 360},80%,80%);"></div> <span class="editor route-name"></span>
 	</label>
-	<span class="pattern">Pattern: <input value="${cat.pattern}" readonly="readonly" /><span class="pattern-type"><br />
+	<span class="pattern">Pattern: <span class="editor" />${cat.pattern}</span><span class="pattern-type"><br />
 		<label><input type="radio" name="pattern-type-${cat.id}" ${cat.pattern === cat.regExp ? 'checked' : ''} value="regexp">RegExp Pattern</label><br />
 		<label><input type="radio" name="pattern-type-${cat.id}" ${cat.pattern !== cat.regExp ? 'checked' : ''} value="express">Express Style Pattern</label>
 	</span></span>
@@ -44,7 +46,7 @@ function generateRouteBox(cat) {
 
 function storeAndUpdateCategories() {
 	chrome.storage.sync.set({
-		[baseUrl]: [...categories.entries()].map(a => {
+		[baseUrl]: [...categories.entries()].filter(a => !a[1].expired).map(a => {
 			const out = {};
 			for (const key of itemsToSync) {
 				out[key] = a[1][key];
@@ -60,9 +62,9 @@ function storeAndUpdateCategories() {
 function editCat(cat, focusEl) {
 	if (cat.editing) return;
 	cat.editing = true;
-	cat.nameEl.value = cat.name;
-	cat.nameEl.readOnly = false;
-	cat.patternEl.readOnly = false;
+	cat.nameEl.textContent = cat.name;
+	cat.nameEl.contentEditable = true;
+	cat.patternEl.contentEditable = true;
 	cat.nameEl.focus();
 	if (focusEl.focus) focusEl.focus();
 }
@@ -72,7 +74,7 @@ function doneEdit(cat) {
 	cat.editing = false;
 
 	// Update values for rerender
-	cat.name = cat.nameEl.value;
+	cat.name = cat.nameEl.textContent;
 
 	routesContainer.removeChild(cat.el);
 	cat.el = false;
@@ -88,17 +90,26 @@ function cancelEdit(cat) {
 	storeAndUpdateCategories();
 }
 
+function removeCat(cat) {
+	cat.editing = false;
+	routesContainer.removeChild(cat.el);
+	cat.el = false;
+	cat.expired = true;
+	storeAndUpdateCategories();
+}
+
 function renderRoutes() {
 
 	if (!$) return;
 	routesContainer = routesContainer || $.querySelector('#routes-container');
 
-	for (const cat of [...categories.values()].reverse()) {
+	for (const cat of [...categories.values()].filter(c => !c.expired).reverse()) {
 		if (!cat.el) {
 			cat.el = generateRouteBox(cat);
-			cat.nameEl = cat.el.querySelector('.route-name');
+			cat.nameEl = cat.el.querySelector('.editor.route-name');
 			cat.listEl = cat.el.querySelector('ul');
-			cat.patternEl = cat.el.querySelector('.pattern input');
+			cat.patternEl = cat.el.querySelector('.pattern .editor');
+			cat.el.querySelector('button.remove').addEventListener('click', () => removeCat(cat));
 			cat.el.addEventListener('keyup', e => {
 				if (e.keyCode === 113) {
 					editCat(cat, cat.nameEl);
@@ -160,7 +171,7 @@ function escapeRegExp(text) {
 function liOnClick(e) {
 	if (e.target.dataset.urlPart) {
 		const value = e.target.dataset.urlPart;
-		if (!categories.has(value)) {
+		if (!categories.has(value) || categories.get(value).expired) {
 			let pattern;
 			let regExp;
 			const parts = getParts(value);
@@ -258,7 +269,7 @@ function update() {
 		o.el.dataset.count = o.count;
 		urlHolder.appendChild(o.el);
 
-		for (const cat of [...categories.values()].reverse()) {
+		for (const cat of [...categories.values()].filter(c => !c.expired).reverse()) {
 			if (cat.regExp) {
 				const regex = cat.actualRegExp || (cat.actualRegExp = reviveRegExp(cat.regExp));
 				if (regex.exec(o.url)) {
@@ -270,7 +281,7 @@ function update() {
 	}
 
 	for (const cat of categories.values()) {
-		cat.nameEl.value = `${cat.name} (${cat.listEl.children.length})`;
+		cat.nameEl.textContent = `${cat.name} (${cat.listEl.children.length})`;
 	}
 }
 

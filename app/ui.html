@@ -28,11 +28,11 @@
 				float: right;
 				color: #777;
 			}
-			.drop-down + label + .pattern input {
+			.drop-down + label + .pattern span.editor {
 				font-family: monospace;
 				width: 20em;
 			}
-			.drop-down + label + .pattern input[readonly] + span {
+			.drop-down + label + .pattern span.editor:not([contenteditable="true"]) + span {
 				display: none;
 			}
 			.drop-down:focus + label {
@@ -68,9 +68,21 @@
 				color: black;
 				text-decoration: none;
 			}
-			input[readonly] {
+			span.editor:not([contenteditable="true"]) {
 				all: unset;
 				font-weight: bold;
+			}
+			span.editor[contenteditable="true"] {
+				-webkit-appearance: textfield;
+				background: white;
+				padding: 1px;
+				border: 1px solid;
+				unset: all;
+				border-width: 2px;
+				border-style: inset;
+				border-color: initial;
+				border-image: initial;
+				font: 13.3333px Arial;
 			}
 			ul {
 				padding: 0;
